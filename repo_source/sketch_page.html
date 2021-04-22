@@ -612,11 +612,14 @@
 	function onKeyUp(event) {
 		if (sketchDisabled)
 			return;
-		else if (event.key == 1)
-			fragmentSketch();
-		else if (event.key == 2)
-			drawSketch();
-		else if (event.key == 3)
+		//else if (event.key == 1)
+		//	fragmentSketch();
+		//else if (event.key == 2)
+		//	drawSketch();
+		//else if (event.key == 3)
+		//	sendSketch();
+
+		if (event.key == 3)
 			sendSketch();
 	}
 
