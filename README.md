@@ -8,7 +8,9 @@ Details about the project's current state are sketched below.
 Client-side dependencies:
 
 Paper.js  0.12.11    ---  http://paperjs.org/
+
 jQuery    3.5.1      ---  https://jquery.com/
+
 D3        6.7.0      ---  https://d3js.org/
 
 Notes:  D3 provides a src link which is hardcoded in sketch_page.html.  Paper.js and jQuery must be downloaded (again refer to sketch_page.html for where it is referenced).
@@ -16,8 +18,11 @@ Notes:  D3 provides a src link which is hardcoded in sketch_page.html.  Paper.js
 Server-side dependencies:
 
 Python         3.7        ---  https://www.python.org/
+
 TensorFlow     2.3.2      ---  https://www.tensorflow.org/
+
 NumPy          1.18.5     ---  https://numpy.org/
+
 opencv-python  4.5.1.48   ---  https://pypi.org/project/opencv-python/
 
 
