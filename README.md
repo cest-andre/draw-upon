@@ -32,6 +32,16 @@ Draw Upon is a simple web application which provides a peak under the hood at de
 
 With the help of Keras, I built a few simple neural networks that perform supervised learning on these sketches.  The networks make use of Keras' convolutional long short-term memory (ConvLSTM) layer to process the sequence of images and produce a category prediction.  I have already trained a few models that perform well on my evaluation dataset.  With the locally hosted server running, I can use the web client to draw my own sketch, convert it into a series of raster frames, and ship it off to the server where a pretrained network makes a prediction.  The server returns quite a few things: the predictions and hiddent states for each frame.  I am interested in the network's frame-by-frame confidence and hidden state dynamics to see which parts of the sketch caused significant disturbances.  A top priority for this project is to incorporate an attention mechanism and subsequently visualize attention dynamics.
 
+
+Categories currently supported:
+
+ant, banana, bicycle, brain, car,
+cat, coffee cup, computer, eye, guitar,
+hammer, helicopter, hourglass, house, key,
+light bulb, map, onion, pizza, river,
+saxophone, shoe, skateboard, tree, wine glass
+
+
 Instructions for use:
 
 Run sketch_server.py and fire up sketch_page.html in a web browser (I've used Chrome and Firefox).  Click and drag the mouse to draw (does not support erase now - refresh page to start over) and press the '3' key to ship it off to the server for sketch prediction.  If successful, the server will return data that the page visualizes beneath where you drew your sketch.  Scroll down to explore!
