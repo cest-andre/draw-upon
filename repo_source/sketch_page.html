@@ -53,7 +53,7 @@
 			type: "POST",
 			url: "http://127.0.0.1:8000/sketch_server.py",
 			contentType: "application/json",
-			async: false,
+			// async: false,
 			data: JSON.stringify({
 				request: "predictSketch",
 				sketchSequence: sketchSequence,
@@ -65,13 +65,13 @@
 	function plotPredictions(predictionResponse) {	
 		var predictions = predictionResponse["predictions"];
 		var catList = predictionResponse["catList"];
-		var imgs = predictionResponse["images"];
+		var inputs = predictionResponse["inputs"];
 		var states = predictionResponse["states"];
 		
 		for (var i = 0; i < predictions.length; i++) {
 			var data = [];
 			var prediction = predictions[i][0];
-			var img = imgs[i];
+			var input = inputs[i];
 			var state = states[i];
 
 			for (var j = 0; j < prediction.length; j++) {
@@ -144,7 +144,7 @@
 			imgFigure.setAttribute("style", "position: relative;");
 
 			var imgEl = document.createElement('img');
-			imgEl.setAttribute("src", "data:image/png;base64," + img);
+			imgEl.setAttribute("src", "data:image/png;base64," + input);
 			imgEl.setAttribute("width", 256);
 			imgEl.setAttribute("height", 256);
 
@@ -244,8 +244,47 @@
 		}
 
 		//	Display confusion matrix here.
-		
+		var confs = predictionResponse["confusions"];
+		console.log(confs);
 
+		var placeHold = document.createElement('div');
+		placeHold.setAttribute("id", "confusions");
+		placeHold.setAttribute("style", "padding-bottom: 15%");
+
+		var table = document.createElement("table");
+		table.setAttribute("style", "padding-bottom: 7%;");
+		var body = document.createElement("tbody");
+		var row = document.createElement("tr");
+
+		for (var i = 0; i < confs.length; i++) {
+			if (i % 3 == 0 && i != 0) {
+				body.appendChild(row);
+				row = document.createElement("tr");
+			}
+
+			var cell = document.createElement("td");
+			var imgFigure = document.createElement('figure');
+			imgFigure.setAttribute("style", "position: relative; padding-top: 15%;");
+
+			var imgEl = document.createElement('img');
+			imgEl.setAttribute("src", "data:image/png;base64," + confs[i]["img"]);
+			// imgEl.setAttribute("width", 256);
+			// imgEl.setAttribute("height", 256);
+
+			var imgCap = document.createElement('figcaption')
+			imgCap.innerHTML = confs[i]["caption"];
+			imgCap.setAttribute("style", "font-size: 20pt; position: absolute; bottom: 95%;");
+
+			imgFigure.appendChild(imgCap);
+			imgFigure.appendChild(imgEl);
+			cell.appendChild(imgFigure);
+			row.appendChild(cell);
+		}
+
+		body.appendChild(row);
+		table.appendChild(body);
+		placeHold.appendChild(table);
+		document.getElementById("svgContainer").appendChild(placeHold);
 	}
 
 </script>
@@ -537,6 +576,7 @@
 
 
 	function sendSketch() {
+		sketchDisabled = true;
 		//	Simplify sketch!
 		for (var i = 0; i < strokes.length; i++) {
 			segs.push(strokes[i].segments);
