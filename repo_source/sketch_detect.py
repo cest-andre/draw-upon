@@ -241,8 +241,8 @@ def train_model(train_samples, train_labels, test_samples, test_labels):
     # AUTOTUNE = tf.data.experimental.AUTOTUNE
     # train_data =
 
-    model.load_weights('trained_sketch_rec_models/candidate_2k-14_weights_3ep/')
-    epoch = 4
+    # model.load_weights('trained_sketch_rec_models/candidate_2k-14_weights_3ep/')
+    epoch = 1
     while epoch < 5:
         model.fit(train_samples, train_labels, batch_size=batch_size, epochs=1)
         model.save_weights(f'trained_sketch_rec_models/candidate_2k-14_weights_{epoch}ep/')
@@ -251,20 +251,18 @@ def train_model(train_samples, train_labels, test_samples, test_labels):
     model.evaluate(test_samples, test_labels, batch_size=batch_size)
 
 
+def matrix_to_png_b64(m):
+    img = keras.preprocessing.image.array_to_img(m)
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    img = buffered.getvalue()
+    img = base64.b64encode(img)
+    img = img.decode("UTF-8")
+
+    return img
+
+
 def produce_confusion_matrix(matrix_path):
-    #   Check if confusion matrix already exists.
-    if os.path.isfile(matrix_path):
-        conf_matrix = np.load(matrix_path, allow_pickle=True)
-        conf_img = keras.preprocessing.image.array_to_img(conf_matrix)
-
-        buffered = BytesIO()
-        conf_img.save(buffered, format="PNG")
-        conf_img = buffered.getvalue()
-        conf_img = base64.b64encode(conf_img)
-        conf_img = conf_img.decode("UTF-8")
-
-        return conf_img
-
     #   Obtain test dataset and begin predictions.  Take highest value as prediction, tally up predictions per category (row is ground truth, column is prediction),
     #   then divide all entries by number of instances of each category.  Finally, save the 25x25 tensor to a file.  Convert it into an image and return to predict_sketch
     #   to send it to client.
@@ -281,20 +279,29 @@ def produce_confusion_matrix(matrix_path):
     inputs = keras.Input(shape=(seq_size, img_dim, img_dim, 1))
 
     #   Model 3.
-    # x = MaskConvLSTM2D(128, return_seq=True, kernel_size=5, return_state=False)(inputs)
-    # x = MaskConvLSTM2D(256, return_seq=False, kernel_size=5, return_state=False)(x)
+    # x = MaskConvLSTM2D(128, return_seq=True, kernel_size=5, return_state=False, predict=True)(inputs)
+    # x = MaskConvLSTM2D(256, return_seq=False, kernel_size=5, return_state=False, predict=True)(x)
 
     #   Model 12.
-    x = MaskConvLSTM2D(128, return_seq=True, kernel_size=3)(inputs)
-    x = MaskConvLSTM2D(256, return_seq=True, kernel_size=3)(x)
+    # x = MaskConvLSTM2D(128, return_seq=True, kernel_size=3, predict=True)(inputs)
+    # x = MaskConvLSTM2D(256, return_seq=True, kernel_size=3, predict=True)(x)
+    # x = layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same')(x)
+    # x = MaskConvLSTM2D(512, return_seq=False, kernel_size=3, predict=True)(x)
+
+    #   Model 14.
+    x = MaskConvLSTM2D(128, return_seq=True, kernel_size=7, predict=True)(inputs)
     x = layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same')(x)
-    x = MaskConvLSTM2D(512, return_seq=False, kernel_size=3)(x)
+    x = MaskConvLSTM2D(256, return_seq=True, kernel_size=5, predict=True)(x)
+    x = layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same')(x)
+    x = MaskConvLSTM2D(512, return_seq=False, kernel_size=3, predict=True)(x)
+
+
     x = layers.GlobalAveragePooling2D()(x)
     outputs = layers.Dense(25, activation='softmax')(x)
 
     model = keras.Model(inputs=inputs, outputs=outputs)
 
-    model.load_weights('trained_sketch_rec_models/candidate_2k-12_weights_5ep/')
+    model.load_weights('trained_sketch_rec_models/candidate_2k-14_weights_3ep/')
     print(model.summary())
 
     conf_matrix = np.zeros([25, 25])
@@ -306,13 +313,12 @@ def produce_confusion_matrix(matrix_path):
 
         input, label = test_samples[i:i+3], test_labels[i:i+3]
         input = tf.stack(input, axis=0)
+        layer_out = model.layers[1](input)
 
-        output = model.layers[1](input)
-        output = model.layers[2](output)
-        output = model.layers[3](output)
-        output = model.layers[4](output)
-        output = model.layers[5](output)
-        prediction = model.layers[6](output)
+        for j in range(2, len(model.layers) - 1):
+            layer_out = model.layers[j](layer_out)
+
+        prediction = model.layers[len(model.layers) - 1](layer_out)
 
         for j in range(prediction.shape[0]):
             conf_matrix[label[j]][tf.argmax(prediction[j]).numpy()] += 1
@@ -325,44 +331,39 @@ def produce_confusion_matrix(matrix_path):
     conf_matrix = tf.constant(conf_matrix, shape=[conf_matrix.shape[0], conf_matrix.shape[1], 1])
     np.save(matrix_path, conf_matrix)
 
-    conf_img = keras.preprocessing.image.array_to_img(conf_matrix.numpy())
-    conf_img.show()
-
-    buffered = BytesIO()
-    conf_img.save(buffered, format="PNG")
-    conf_img = buffered.getvalue()
-    conf_img = base64.b64encode(conf_img)
-    conf_img = conf_img.decode("UTF-8")
+    conf_img = matrix_to_png_b64(conf_matrix)
 
     return conf_img
 
 
-#   Make functional for state retrieval.
+#   Functional model setup for state visualization.
 def get_model(seq_size, img_dim):
-    #   Sequential model setup.
-    # model = keras.Sequential()
-    #
-    # model.add(keras.Input(shape=(seq_size, img_dim, img_dim, 1)))
-    #
-    # #   Model candidate 3: 2 lite
-    # model.add(MaskConvLSTM2D(128, return_seq=True, kernel_size=5))
-    # model.add(MaskConvLSTM2D(256, return_seq=True, kernel_size=5))
-    #
-    # #   Final layer outputs fed forward manually in predict_sketch so do not global pool.
-    # #model.add(layers.GlobalAveragePooling2D())
-    # model.add(layers.Dense(25, activation='softmax'))
-    
-    #   Functional model setup for state visualization.
     inputs = keras.Input(shape=(seq_size, img_dim, img_dim, 1))
-    # x = MaskConvLSTM2D(128, return_seq=True, kernel_size=5, return_state=False)(inputs)
-    # x = MaskConvLSTM2D(256, return_seq=False, kernel_size=5, return_state=True)(x)
-    x = MaskConvLSTM2D(128, return_seq=True, kernel_size=5, return_state=True, predict=True)(inputs)
-    x = MaskConvLSTM2D(256, return_seq=False, kernel_size=5, return_state=True, predict=True)(x[0])
+
+    #   Model 3.
+    # x = MaskConvLSTM2D(128, return_seq=True, kernel_size=5, return_state=True, predict=True)(inputs)
+    # x = MaskConvLSTM2D(256, return_seq=False, kernel_size=5, return_state=True, predict=True)(x[0])
+
+    #   Model 12.
+    # x = MaskConvLSTM2D(128, return_seq=True, kernel_size=3, return_state=True, predict=True)(inputs)
+    # x = MaskConvLSTM2D(256, return_seq=True, kernel_size=3, return_state=True, predict=True)(x[0])
+    # x = layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same')(x[0])
+    # x = MaskConvLSTM2D(512, return_seq=False, kernel_size=3, return_state=True, predict=True)(tf.stack([x[0]], axis=0))
+
+    #   Model 14.
+    x = MaskConvLSTM2D(128, return_seq=True, kernel_size=7, return_state=True, predict=True)(inputs)
+    x = layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same')(x[0])
+    x = MaskConvLSTM2D(256, return_seq=True, kernel_size=5, return_state=True, predict=True)(tf.stack([x[0]], axis=0))
+    x = layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same')(x[0])
+    x = MaskConvLSTM2D(512, return_seq=False, kernel_size=3, return_state=True, predict=True)(tf.stack([x[0]], axis=0))
+
     x = layers.GlobalAveragePooling2D()(x[0])
     outputs = layers.Dense(25, activation='softmax')(x)
 
     model = keras.Model(inputs=inputs, outputs=outputs)
-    model.load_weights('trained_sketch_rec_models/candidate_2k-3_weights_3ep/')
+    # model.load_weights('trained_sketch_rec_models/candidate_2k-3_weights_3ep/')
+    # model.load_weights('trained_sketch_rec_models/candidate_2k-12_weights_5ep/')
+    model.load_weights('trained_sketch_rec_models/candidate_2k-14_weights_3ep/')
     print(model.summary())
 
     return model
@@ -428,71 +429,76 @@ def predict_sketch(sketch_sequence):
 
     #   Make sure you know the architecture of the layer before executing this.  Need to change when number of layers change.
     model = get_model(sample.shape[1], sample.shape[2])
+
     inputs = model.layers[0](sample)
     returned_states = []
-    returned_gates = []
     predictions = []
-    first_states = None
-    second_states = None
 
-    #   Double stack before feeding to convLSTM layers because they expect dim = 5 (batch size, sequence size, img width, img height, channels).
+    #   For each convLSTM layer in model, hidden states from previous timestep will be stored in hidden_states.
+    hidden_states = []
+    for i in range(len(model.layers)):
+        if "mask_conv_lst_m2d" in model.layers[i].name:
+            hidden_states.append(None)
+
+    #   Double stack inputs before feeding to convLSTM layers because they expect dim = 5 (batch size, sequence size, img width, img height, channels).
     for i in range(len(sketch_imgs)):
         input = tf.stack([inputs[0][i]], axis=0)
-        #   Calculate the fist filter's input gate for the first layer.  Maybe this is similar to attention.
+        #   Calculate the fist filter's input gate for the first layer.
         kernel_i, kernel_f, kernel_c, kernel_o = array_ops.split(model.layers[1].weights[0], 4, axis=3)
         r_kernel_i, r_kernel_f, r_kernel_c, r_kernel_o  = array_ops.split(model.layers[1].weights[1], 4, axis=3)
         bias_i, bias_f, bias_c, bias_o = array_ops.split(model.layers[1].weights[2], 4)
-        #   The initial hidden state is zeros.  Just have to find the right dimensions.
-        # init_states = [k.zeros((1, 1, 32, 32, 128))]
-        # print(init_states)
+
         i_gate = None
         x_i = k.conv2d(tf.cast(input, tf.float32), kernel_i, padding="same")
         x_i = k.bias_add(x_i, bias_i)
-        if first_states is None:
+        if hidden_states[0] is None:
             i_gate = activations.sigmoid(x_i)
         else:
-            h_i = k.conv2d(first_states[1], r_kernel_i, padding='same')
+            h_i = k.conv2d(hidden_states[0][1], r_kernel_i, padding='same')
             i_gate = activations.sigmoid(x_i + h_i)
         i_gate = tf.transpose(i_gate, [3, 1, 2, 0])[0]
         i_min, i_max = tf.reduce_min(i_gate), tf.reduce_max(i_gate)
 
         gate_state = tf.cast(((i_gate - i_min) / (i_max - i_min))*255, tf.uint8)
+        gate_img = matrix_to_png_b64(gate_state.numpy())
 
-        gate_img = keras.preprocessing.image.array_to_img(gate_state.numpy())
-        buffered = BytesIO()
-        gate_img.save(buffered, format="PNG")
-        gate_img = buffered.getvalue()
-        gate_img = base64.b64encode(gate_img)
-        gate_img = gate_img.decode("UTF-8")
-        returned_gates.append(gate_img)
+        pooled_states = None
+        hidden_count = 0
 
+        for j in range(1, len(model.layers) - 2):
+            wrapped_in = None
+            if j == 1:
+                wrapped_in = input
+                wrapped_in = tf.stack([wrapped_in], axis=0)
+            elif pooled_states is not None:
+                wrapped_in = pooled_states
+                pooled_states = None
+            else:
+                wrapped_in = hidden_states[hidden_count-1][0]
 
-        if first_states is None:
-            wrapped_in = tf.stack([inputs[0][i]], axis=0)
-            wrapped_in = tf.stack([wrapped_in], axis=0)
-            first_states = model.layers[1](wrapped_in)
+            if "mask_conv_lst_m2d" in model.layers[j].name:
+                if hidden_states[hidden_count] is None:
+                    hidden_states[hidden_count] = model.layers[j](wrapped_in)
+                else:
+                    hidden_states[hidden_count] = model.layers[j](wrapped_in, [hidden_states[hidden_count][1], hidden_states[hidden_count][2]])
+
+                hidden_count += 1
+            else:
+                pooled_states = model.layers[j](wrapped_in)
+
+        last_state = None
+
+        if pooled_states is None:
+            last_state = hidden_states[len(hidden_states) - 1]
         else:
-            wrapped_in = tf.stack([inputs[0][i]], axis=0)
-            wrapped_in = tf.stack([wrapped_in], axis=0)
-            first_states = model.layers[1](wrapped_in, [first_states[1], first_states[2]])
+            last_state = pooled_states
 
-        if second_states is None:
-            wrapped_out = tf.stack([first_states[0][0]], axis=0)
-            wrapped_out = tf.stack([wrapped_out], axis=0)
-            second_states = model.layers[2](wrapped_out)
-        else:
-            wrapped_out = tf.stack([first_states[0][0]], axis=0)
-            wrapped_out = tf.stack([wrapped_out], axis=0)
-            second_states = model.layers[2](wrapped_out, [second_states[1], second_states[2]])
+        out_state = model.layers[len(model.layers) - 2](tf.stack([last_state[0][0]], axis=0))
+        prediction = model.layers[len(model.layers) - 1](out_state)
 
-        #out_state = tf.reshape(second_states[0], shape=[1, 32, 32, 256])
-        out_state = model.layers[3](second_states[0][0])
-        prediction = model.layers[4](out_state)
-
-        #   Convert out[1] and out[2] to images and append to hidden_states.
-        #   Transform second and third state (which I believe is the filter and cell respectively) into an image.
-        filter_state = tf.transpose(second_states[1][0], [0, 3, 1, 2])
-        cell_state = tf.transpose(second_states[2][0], [0, 3, 1, 2])
+        #   Transform first cell and completed filter from second layer into an image.
+        filter_state = tf.transpose(hidden_states[0][1], [0, 3, 1, 2])
+        cell_state = tf.transpose(hidden_states[0][2], [0, 3, 1, 2])
         #   Second dim of h_state decides which cell to choose.  Each output filter has a cell.
         filter_state = tf.reshape(filter_state[0][1], shape=[32, 32, 1])
         cell_state = tf.reshape(cell_state[0][1], shape=[32, 32, 1])
@@ -503,28 +509,45 @@ def predict_sketch(sketch_sequence):
         filter_state = tf.cast(((filter_state - f_min) / (f_max - f_min))*255, tf.uint8)
         cell_state = tf.cast(((cell_state - c_min) / (c_max - c_min))*255, tf.uint8)
 
-        filter_img = keras.preprocessing.image.array_to_img(filter_state.numpy())
-        buffered = BytesIO()
-        filter_img.save(buffered, format="PNG")
-        filter_img = buffered.getvalue()
-        filter_img = base64.b64encode(filter_img)
-        filter_img = filter_img.decode("UTF-8")
-
-        cell_img = keras.preprocessing.image.array_to_img(cell_state.numpy())
-        buffered = BytesIO()
-        cell_img.save(buffered, format="PNG")
-        cell_img = buffered.getvalue()
-        cell_img = base64.b64encode(cell_img)
-        cell_img = cell_img.decode("UTF-8")
-
-        # tfimg = keras.preprocessing.image.array_to_img(cell_state)
-        # tfimg.show()
+        filter_img = matrix_to_png_b64(filter_state.numpy())
+        cell_img = matrix_to_png_b64(cell_state.numpy())
 
         returned_states.append([gate_img, cell_img, filter_img])
         predictions.append(prediction.numpy().tolist())
 
+    #   Construct confusion images.
+    conf_imgs = []
+
+    model_3_conf = np.load('confusion/model_2k-3_3ep.npy', allow_pickle=True)
+    model_12_conf = np.load('confusion/model_2k-12_5ep.npy', allow_pickle=True)
+    model_14_conf = np.load('confusion/model_2k-14_3ep.npy', allow_pickle=True)
+
+    conf_imgs.append({"caption": "Model 3 Confusion Matrix", "img": matrix_to_png_b64(model_3_conf)})
+    conf_imgs.append({"caption": "Model 12 Confusion Matrix", "img": matrix_to_png_b64(model_12_conf)})
+    conf_imgs.append({"caption": "Model 14 Confusion Matrix", "img": matrix_to_png_b64(model_14_conf)})
+
+    #   Compute differences.
+    # diffs = model_12_conf - model_3_conf
+    # diff_min, diff_max = tf.reduce_min(diffs), tf.reduce_max(diffs)
+    #
+    # conf_matrix = tf.cast(((diffs - diff_min) / (diff_max - diff_min))*255, tf.uint8)
+    # conf_matrix = cv2.resize(conf_matrix.numpy(), dsize=(512, 512), interpolation=cv2.INTER_NEAREST)
+    # conf_matrix = tf.constant(conf_matrix, shape=[conf_matrix.shape[0], conf_matrix.shape[1], 1])
+    #
+    # conf_imgs.append({"caption": "12 minus 3 Confusion Matrix", "img": matrix_to_png_b64(conf_matrix)})
+    #
+    # diffs = model_14_conf - model_12_conf
+    # diff_min, diff_max = tf.reduce_min(diffs), tf.reduce_max(diffs)
+    #
+    # conf_matrix = tf.cast(((diffs - diff_min) / (diff_max - diff_min))*255, tf.uint8)
+    # conf_matrix = cv2.resize(conf_matrix.numpy(), dsize=(512, 512), interpolation=cv2.INTER_NEAREST)
+    # conf_matrix = tf.constant(conf_matrix, shape=[conf_matrix.shape[0], conf_matrix.shape[1], 1])
+    #
+    # conf_imgs.append({"caption": "14 minus 12 Confusion Matrix", "img": matrix_to_png_b64(model_14_conf - model_12_conf)})
+    # conf_imgs.append({"caption": "14 minus 3 Confusion Matrix", "img": matrix_to_png_b64(model_14_conf - model_3_conf)})
+
     #   Send off hidden states such as input and output gates for attention visualization as well.
-    return {"catList": cat_list, "predictions": predictions, "images": returned_imgs, "states": returned_states}
+    return {"catList": cat_list, "predictions": predictions, "inputs": returned_imgs, "states": returned_states, "confusions": conf_imgs}
 
 
 #   Current category selection is preferred because they contain much closer to 1k sub-50 length sequences.  Need to recreate dataset using 2 segments
@@ -533,4 +556,4 @@ def predict_sketch(sketch_sequence):
 #
 # train_model(train_samples, train_labels, test_samples, test_labels)
 
-# produce_confusion_matrix('confusion/model_2k-12_5ep.npy')
+# produce_confusion_matrix('confusion/model_2k-14_3ep.npy')
