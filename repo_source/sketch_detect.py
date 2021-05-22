@@ -4,7 +4,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  #  Suppresses some logs
 from io import BytesIO
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
+from tensorflow.keras import layers, regularizers
 import numpy as np
 import math
 import cv2
@@ -69,10 +69,7 @@ class MaskConvLSTM2D(layers.Layer):
         return mask
 
 
-
-
-#   Preferred X shape: [instance (25k), frame (variable/None - use padded_batch), width (256), height (256), grayscale (256)]
-def load_data(prefix, categories):
+def load_lstm_data(prefix, categories):
     if (os.path.isfile('sketch_data/train_samples.npy') and os.path.isfile('sketch_data/train_labels.npy') and
         os.path.isfile('sketch_data/test_samples.npy') and os.path.isfile('sketch_data/test_labels.npy')):
         train_samples = np.load('sketch_data/train_samples.npy', allow_pickle=True)
@@ -155,7 +152,66 @@ def load_data(prefix, categories):
     return train_samples, train_labels, test_samples, test_labels
 
 
-def train_model(train_samples, train_labels, test_samples, test_labels):
+def load_cnn_data(prefix, categories):
+    if (os.path.isfile('sketch_data/cnn_samples/train_samples.npy') and os.path.isfile('sketch_data/cnn_samples/train_labels.npy') and
+        os.path.isfile('sketch_data/cnn_samples/test_samples.npy') and os.path.isfile('sketch_data/cnn_samples/test_labels.npy')):
+        train_samples = np.load('sketch_data/cnn_samples/train_samples.npy', allow_pickle=True)
+        train_labels = np.load('sketch_data/cnn_samples/train_labels.npy', allow_pickle=True)
+        test_samples = np.load('sketch_data/cnn_samples/test_samples.npy', allow_pickle=True)
+        test_labels = np.load('sketch_data/cnn_samples/test_labels.npy', allow_pickle=True)
+
+        return train_samples, train_labels, test_samples, test_labels
+
+    train_samples = []
+    train_labels = []
+    test_samples = []
+    test_labels = []
+    total_samples = 2000
+    num_training_per_cat = 1600
+
+    for i in range(len(categories)):
+        category = categories[i]
+        label = i
+        catCount = 0
+
+        for j in range(total_samples):
+            #   Drop to 15 so that max is 16 due to final frame getting appended in addition to seqLength frames for some samples.
+            seqDir = prefix + f"{category}/{category}_{j+1}/"
+            numFrames = len(os.listdir(seqDir))
+
+            img = tf.io.read_file(seqDir + f"{numFrames}.png")
+            img = tf.image.decode_png(img, channels=4).numpy()
+            #   Black sketch on white background.
+            #img = (255 - img[:, :, 3])
+            #   White sketch on black background.
+            img = img[:, :, 3]
+            #   Try other resizers.
+            img = cv2.resize(img, dsize=(32, 32), interpolation=cv2.INTER_AREA)
+            img = np.reshape(img, [32, 32, 1])
+
+            if j < num_training_per_cat:
+                train_samples.append(img)
+                train_labels.append(label)
+            else:
+                test_samples.append(img)
+                test_labels.append(label)
+
+            catCount += 1
+            if catCount % 100 == 0:
+                print(category, catCount)
+
+            # if catCount >= 1000:
+            #     break
+
+    np.save('sketch_data/cnn_samples/train_samples.npy', train_samples)
+    np.save('sketch_data/cnn_samples/train_labels.npy', train_labels)
+    np.save('sketch_data/cnn_samples/test_samples.npy', test_samples)
+    np.save('sketch_data/cnn_samples/test_labels.npy', test_labels)
+
+    return train_samples, train_labels, test_samples, test_labels
+
+
+def train_lstm_model(train_samples, train_labels, test_samples, test_labels):
     train_labels = np.asarray(train_labels)
     test_labels = np.asarray(test_labels)
 
@@ -251,6 +307,104 @@ def train_model(train_samples, train_labels, test_samples, test_labels):
     model.evaluate(test_samples, test_labels, batch_size=batch_size)
 
 
+def train_cnn_model(train_samples, train_labels, test_samples, test_labels):
+    train_samples = np.stack(train_samples, axis=0)
+    test_samples = np.stack(test_samples, axis=0)
+    train_labels = np.asarray(train_labels)
+    test_labels = np.asarray(test_labels)
+
+    # train_samples = keras.preprocessing.sequence.pad_sequences(train_samples, padding="post", value=1000*255)
+    # test_samples = keras.preprocessing.sequence.pad_sequences(test_samples, padding="post", value=1000*255)
+
+    # train_samples = train_samples.astype("float32") / 255.0
+    # test_samples = test_samples.astype("float32") / 255.0
+    #
+    train_samples = np.reshape(train_samples, [train_samples.shape[0], 32, 32, 1])
+    test_samples = np.reshape(test_samples, [test_samples.shape[0], 32, 32, 1])
+
+    img_dim = train_samples.shape[2]
+
+    print(train_samples.shape)
+    print(train_labels.shape)
+
+    inputs = keras.Input(shape=(32, 32, 1))
+    x = layers.Conv2D(128, 9, padding='same', kernel_regularizer=regularizers.l2(0.01))(inputs)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(128, 9, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(128, 9, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+
+    x = layers.MaxPooling2D()(x)
+    x = layers.Conv2D(256, 7, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(256, 7, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(256, 7, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+
+    # x = layers.MaxPooling2D()(x)
+    x = layers.Conv2D(512, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    # x = layers.MaxPooling2D()(x)
+    x = layers.Conv2D(512, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(512, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+
+    x = layers.MaxPooling2D()(x)
+    x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+
+    x = layers.GlobalAveragePooling2D()(x)
+    outputs = layers.Dense(25, activation='softmax')(x)
+
+    model = keras.Model(inputs=inputs, outputs=outputs)
+
+    model.compile(
+        loss=keras.losses.SparseCategoricalCrossentropy(),
+        optimizer=keras.optimizers.Adam(lr=0.0001),
+        metrics=["accuracy"]
+    )
+
+    print(model.summary())
+
+    batch_size = 8
+
+    # #   Try autotune.
+    # AUTOTUNE = tf.data.experimental.AUTOTUNE
+    # train_data =
+
+    model.load_weights('trained_sketch_rec_models/cnn_candidate_3_weights_50ep/')
+    epoch = 55
+
+    # while epoch < 65:
+    #     model.fit(train_samples, train_labels, batch_size=batch_size, epochs=5)
+    #     model.save_weights(f'trained_sketch_rec_models/cnn_candidate_3_weights_{epoch}ep/')
+    #     epoch += 5
+
+    # model.fit(train_samples, train_labels, batch_size=batch_size, epochs=5)
+    # model.save_weights(f'trained_sketch_rec_models/cnn_candidate_4_weights_{epoch}ep/')
+
+    model.evaluate(test_samples, test_labels, batch_size=batch_size)
+
+
 def matrix_to_png_b64(m):
     img = keras.preprocessing.image.array_to_img(m)
     buffered = BytesIO()
@@ -337,7 +491,8 @@ def produce_confusion_matrix(matrix_path):
 
 
 #   Functional model setup for state visualization.
-def get_model(seq_size, img_dim):
+def get_models(seq_size, img_dim):
+    #   LSTM Model.
     inputs = keras.Input(shape=(seq_size, img_dim, img_dim, 1))
 
     #   Model 3.
@@ -360,13 +515,69 @@ def get_model(seq_size, img_dim):
     x = layers.GlobalAveragePooling2D()(x[0])
     outputs = layers.Dense(25, activation='softmax')(x)
 
-    model = keras.Model(inputs=inputs, outputs=outputs)
+    lstm_model = keras.Model(inputs=inputs, outputs=outputs)
     # model.load_weights('trained_sketch_rec_models/candidate_2k-3_weights_3ep/')
     # model.load_weights('trained_sketch_rec_models/candidate_2k-12_weights_5ep/')
-    model.load_weights('trained_sketch_rec_models/candidate_2k-14_weights_3ep/')
-    print(model.summary())
+    lstm_model.load_weights('trained_sketch_rec_models/candidate_2k-14_weights_3ep/')
+    print(lstm_model.summary())
 
-    return model
+    #   CNN Model.
+    inputs = keras.Input(shape=(img_dim, img_dim, 1))
+
+    #   Model 3.
+    x = layers.Conv2D(128, 9, padding='same', kernel_regularizer=regularizers.l2(0.01))(inputs)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(128, 9, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(128, 9, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+
+    x = layers.MaxPooling2D()(x)
+    x = layers.Conv2D(256, 7, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(256, 7, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(256, 7, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+
+    # x = layers.MaxPooling2D()(x)
+    x = layers.Conv2D(512, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    # x = layers.MaxPooling2D()(x)
+    x = layers.Conv2D(512, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(512, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+
+    x = layers.MaxPooling2D()(x)
+    x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+    x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    x = layers.BatchNormalization()(x)
+    x = keras.activations.relu(x)
+
+    x = layers.GlobalAveragePooling2D()(x)
+    outputs = layers.Dense(25, activation='softmax')(x)
+
+    cnn_model = keras.Model(inputs=inputs, outputs=outputs)
+    cnn_model.load_weights('trained_sketch_rec_models/cnn_candidate_3_weights_50ep/')
+
+    print(cnn_model.summary())
+
+    return lstm_model, cnn_model
 
 
 def predict_sketch(sketch_sequence):
@@ -391,22 +602,7 @@ def predict_sketch(sketch_sequence):
         #tfimg = tf.constant(img)
         #img = img.astype("float32")
         sketch_imgs.append(img)
-
-        pil_img = keras.preprocessing.image.array_to_img(img)
-        buffered = BytesIO()
-        pil_img.save(buffered, format="PNG")
-        pil_img = buffered.getvalue()
-        # cv_img = cv2.imencode('.png', img, [cv2.IMWRITE_PNG_BILEVEL, 1])[1].tostring()
-        pil_img = base64.b64encode(pil_img)
-        pil_img = pil_img.decode("UTF-8")
-        #   Encode this byte string thing into base64.
-        #print(tfimg[0])
-        returned_imgs.append(pil_img)
-
-        # tfimg = base64.b64decode(tfimg)
-        # tfimg = tf.image.decode_png(tfimg, channels=1).numpy()
-        # tfimg = keras.preprocessing.image.array_to_img(tfimg)
-        # tfimg.show()
+        returned_imgs.append(matrix_to_png_b64(img))
 
         if frameNum == numFrames - 1:
             break
@@ -418,35 +614,37 @@ def predict_sketch(sketch_sequence):
     print(len(sketch_imgs))
     wrapper = [np.stack(sketch_imgs, axis=0)]
 
-    # for i in range(len(sketch_imgs)):
-    #     img = sketch_imgs[i]
-    #     img = keras.preprocessing.image.array_to_img(img)
-    #     img.show()
-
     sample = keras.preprocessing.sequence.pad_sequences(wrapper, maxlen=16, padding="post", value=1000)
-    #sample = tf.constant(sample)
-    #sample = tf.cast(sample, dtype=tf.int32)
 
     #   Make sure you know the architecture of the layer before executing this.  Need to change when number of layers change.
-    model = get_model(sample.shape[1], sample.shape[2])
+    lstm_model, cnn_model = get_models(sample.shape[1], sample.shape[2])
 
-    inputs = model.layers[0](sample)
+    inputs = lstm_model.layers[0](sample)
     returned_states = []
     predictions = []
 
     #   For each convLSTM layer in model, hidden states from previous timestep will be stored in hidden_states.
     hidden_states = []
-    for i in range(len(model.layers)):
-        if "mask_conv_lst_m2d" in model.layers[i].name:
+    for i in range(len(lstm_model.layers)):
+        if "mask_conv_lst_m2d" in lstm_model.layers[i].name:
             hidden_states.append(None)
 
     #   Double stack inputs before feeding to convLSTM layers because they expect dim = 5 (batch size, sequence size, img width, img height, channels).
     for i in range(len(sketch_imgs)):
+        #   Calculate feedforward CNN prediction first.
+        cnn_in = tf.stack([sketch_imgs[i]], axis=0)
+        cnn_in = tf.cast(cnn_in, dtype=tf.float32)
+
+        cnn_prediction = cnn_model.layers[0](cnn_in)
+        for j in range(1, len(cnn_model.layers)):
+            cnn_prediction = cnn_model.layers[j](cnn_prediction)
+
+        #   Time for LSTM.
         input = tf.stack([inputs[0][i]], axis=0)
         #   Calculate the fist filter's input gate for the first layer.
-        kernel_i, kernel_f, kernel_c, kernel_o = array_ops.split(model.layers[1].weights[0], 4, axis=3)
-        r_kernel_i, r_kernel_f, r_kernel_c, r_kernel_o  = array_ops.split(model.layers[1].weights[1], 4, axis=3)
-        bias_i, bias_f, bias_c, bias_o = array_ops.split(model.layers[1].weights[2], 4)
+        kernel_i, kernel_f, kernel_c, kernel_o = array_ops.split(lstm_model.layers[1].weights[0], 4, axis=3)
+        r_kernel_i, r_kernel_f, r_kernel_c, r_kernel_o  = array_ops.split(lstm_model.layers[1].weights[1], 4, axis=3)
+        bias_i, bias_f, bias_c, bias_o = array_ops.split(lstm_model.layers[1].weights[2], 4)
 
         i_gate = None
         x_i = k.conv2d(tf.cast(input, tf.float32), kernel_i, padding="same")
@@ -465,7 +663,7 @@ def predict_sketch(sketch_sequence):
         pooled_states = None
         hidden_count = 0
 
-        for j in range(1, len(model.layers) - 2):
+        for j in range(1, len(lstm_model.layers) - 2):
             wrapped_in = None
             if j == 1:
                 wrapped_in = input
@@ -476,15 +674,15 @@ def predict_sketch(sketch_sequence):
             else:
                 wrapped_in = hidden_states[hidden_count-1][0]
 
-            if "mask_conv_lst_m2d" in model.layers[j].name:
+            if "mask_conv_lst_m2d" in lstm_model.layers[j].name:
                 if hidden_states[hidden_count] is None:
-                    hidden_states[hidden_count] = model.layers[j](wrapped_in)
+                    hidden_states[hidden_count] = lstm_model.layers[j](wrapped_in)
                 else:
-                    hidden_states[hidden_count] = model.layers[j](wrapped_in, [hidden_states[hidden_count][1], hidden_states[hidden_count][2]])
+                    hidden_states[hidden_count] = lstm_model.layers[j](wrapped_in, [hidden_states[hidden_count][1], hidden_states[hidden_count][2]])
 
                 hidden_count += 1
             else:
-                pooled_states = model.layers[j](wrapped_in)
+                pooled_states = lstm_model.layers[j](wrapped_in)
 
         last_state = None
 
@@ -493,8 +691,8 @@ def predict_sketch(sketch_sequence):
         else:
             last_state = pooled_states
 
-        out_state = model.layers[len(model.layers) - 2](tf.stack([last_state[0][0]], axis=0))
-        prediction = model.layers[len(model.layers) - 1](out_state)
+        out_state = lstm_model.layers[len(lstm_model.layers) - 2](tf.stack([last_state[0][0]], axis=0))
+        prediction = lstm_model.layers[len(lstm_model.layers) - 1](out_state)
 
         #   Transform first cell and completed filter from second layer into an image.
         filter_state = tf.transpose(hidden_states[0][1], [0, 3, 1, 2])
@@ -513,7 +711,7 @@ def predict_sketch(sketch_sequence):
         cell_img = matrix_to_png_b64(cell_state.numpy())
 
         returned_states.append([gate_img, cell_img, filter_img])
-        predictions.append(prediction.numpy().tolist())
+        predictions.append({"lstm": prediction.numpy().tolist(), "cnn": cnn_prediction.numpy().tolist()})
 
     #   Construct confusion images.
     conf_imgs = []
@@ -552,8 +750,7 @@ def predict_sketch(sketch_sequence):
 
 #   Current category selection is preferred because they contain much closer to 1k sub-50 length sequences.  Need to recreate dataset using 2 segments
 #   per frame to shorten these sequences and have more instances.
-# train_samples, train_labels, test_samples, test_labels = load_data("sketch_data/converted_data/", cat_list)
-#
-# train_model(train_samples, train_labels, test_samples, test_labels)
+# train_samples, train_labels, test_samples, test_labels = load_cnn_data("sketch_data/converted_data/", cat_list)
+# train_cnn_model(train_samples, train_labels, test_samples, test_labels)
 
 # produce_confusion_matrix('confusion/model_2k-14_3ep.npy')
