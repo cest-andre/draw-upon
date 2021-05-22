@@ -53,7 +53,7 @@
 			type: "POST",
 			url: "http://127.0.0.1:8000/sketch_server.py",
 			contentType: "application/json",
-			// async: false,
+			async: false,
 			data: JSON.stringify({
 				request: "predictSketch",
 				sketchSequence: sketchSequence,
@@ -61,32 +61,40 @@
 		}).responseJSON;
 	}
 
-
+	//	For CNN plot along side lstm, create a second data list with the CNN predictions.
+	//	Modify the svg.append("g")'s x attr to be offset slightly to the left.  Also try and make bar thinner (x.bandwidth / 2?).
+	//	Next, append a new g with similar attributes and different color (a nice green).  Set x to be same but bumped to the right a bit.
+	//	Add a legend next.
 	function plotPredictions(predictionResponse) {	
 		var predictions = predictionResponse["predictions"];
 		var catList = predictionResponse["catList"];
 		var inputs = predictionResponse["inputs"];
 		var states = predictionResponse["states"];
 		
+		//	Assert both prediction lengths are same.
 		for (var i = 0; i < predictions.length; i++) {
-			var data = [];
-			var prediction = predictions[i][0];
+			var lstm_data = [];
+			var cnn_data = [];
+			var prediction = predictions[i];
 			var input = inputs[i];
 			var state = states[i];
 
-			for (var j = 0; j < prediction.length; j++) {
-				data.push({ name: catList[j], value: prediction[j] });
+			for (var j = 0; j < catList.length; j++) {
+				lstm_data.push({ name: catList[j], value: prediction["lstm"][0][j]});
+				cnn_data.push({ name: catList[j], value: prediction["cnn"][0][j]});
 			}
-
-			data = Object.assign(data, {format: "%", y: "Frame " + i});
+			
+			lstm_data = Object.assign(lstm_data, {format: "%", y: "Frame " + i});
+			cnn_data = Object.assign(cnn_data, {format: "%", y: "Frame " + i});
 
 			margin = ({ top: 30, right: 0, bottom: 30, left: 50 });
 			height = 700;
 			width = 1700;
-			color = "steelblue";
+			lstm_color = "steelblue";
+			cnn_color = "seagreen";
 			
 			x = d3.scaleBand()
-				.domain(d3.range(data.length))
+				.domain(d3.range(lstm_data.length))
 				.range([margin.left, width - margin.right])
 				.padding(0.1);
 
@@ -97,11 +105,11 @@
 
 			xAxis = g => g
 				.attr("transform", `translate(0,${height - margin.bottom})`)
-				.call(d3.axisBottom(x).tickFormat(i => data[i].name).tickSizeOuter(0));
+				.call(d3.axisBottom(x).tickFormat(i => lstm_data[i].name).tickSizeOuter(0));
 
 			yAxis = g => g
 				.attr("transform", `translate(${margin.left},0)`)
-				.call(d3.axisLeft(y).ticks(null, data.format))
+				.call(d3.axisLeft(y).ticks(null, lstm_data.format))
 				.call(g => g.select(".domain").remove())
 				// .call(g => g.append("text")
 				// 	.attr("x", -margin.left)
@@ -114,15 +122,27 @@
 				.attr("viewBox", [0, 0, width, height])
 				.attr("style", "position: relative; width: 98%;");
 
+			//	LSTM predictions.
 			svg.append("g")
-				.attr("fill", color)
+				.attr("fill", lstm_color)
 				.selectAll("rect")
-				.data(data)
+				.data(lstm_data)
 				.join("rect")
-				.attr("x", (d, i) => x(i))
+				.attr("x", (d, i) => x(i) + 5)
 				.attr("y", d => y(d.value))
 				.attr("height", d => y(0) - y(d.value))
-				.attr("width", x.bandwidth());
+				.attr("width", x.bandwidth() / 2.5);
+
+			//	CNN predictions.
+			svg.append("g")
+				.attr("fill", cnn_color)
+				.selectAll("rect")
+				.data(cnn_data)
+				.join("rect")
+				.attr("x", (d, i) => x(i) + 32)
+				.attr("y", d => y(d.value))
+				.attr("height", d => y(0) - y(d.value))
+				.attr("width", x.bandwidth() / 2.5);
 
 			svg.append("g")
 				.call(xAxis);
@@ -149,7 +169,7 @@
 			imgEl.setAttribute("height", 256);
 
 			var imgCap = document.createElement('figcaption')
-			imgCap.innerHTML = "Frame " + (i+1) + "<br><br><br><br>Input Image";
+			imgCap.innerHTML = "Frame " + (i+1) + "<br><br>Blue - LSTM<br>Green - CNN<br><br><br><br>Input Image";
 			imgCap.setAttribute("style", "font-size: 20pt; position: absolute; bottom: 120%;");
 
 			imgFigure.appendChild(imgCap);
