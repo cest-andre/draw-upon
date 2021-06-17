@@ -1,9 +1,6 @@
 # Draw Upon
 
-In its current state, this is more of a workbench for me to tinker around with neural network models that perform sketch object recognition.  Long term ambitions are to convert this into an interactive educational tool for people to learn about the inner workings of artificial neural networks through their own drawings.  Using the web client (sketch_page.html), the user may create a drawing and submit it to the server (sketch_server.py).  The server loads up a pretrained network (sketch_detect.py) and returns the feedforward results.  These results will be presented in a digestable form so that the user can better understand how the network made its prediction.
-
-
-Details about the project's current state are sketched below.
+In its current state, this is more of a workbench for me to tinker around with neural network models that perform sketch object recognition.  Using the web client (sketch_page.html), the user may create a drawing and submit it to the server (sketch_server.py).  The server loads up a pretrained network (sketch_detect.py) and returns the results.  These results will be presented in a digestable form so that the user can better understand how the network made its prediction.  Details about the project's current state are sketched below.
 
 
 Client-side dependencies:
@@ -29,12 +26,15 @@ opencv-python  4.5.1.48   ---  https://pypi.org/project/opencv-python/
 
 Summary of the project's current state:
 
-Draw Upon is a simple web application which provides a peak under the hood at deep neural network performing sketch object recognition.  Taking a supervised learning approach, I downloaded thousands of sketches from Google's QuickDraw dataset (https://quickdraw.withgoogle.com/).  I am currently using a subset of data consisting of 50,000 examples (25 categories, 2,000 / category).  These sketches are in sequential vector format (sequenced by strokes in the order it was drawn) but I am particularly interested in sequences of raster (video) data.  Therefore, I used Paper.js to import QuickDraw data into the web client and convert it to a series of raster frames of the sketch being drawn in the same order.
+Draw Upon is a simple web application which provides a peak under the hood at a deep neural network performing sketch object recognition.  Taking a supervised learning approach, I downloaded thousands of sketches from Google's QuickDraw dataset (https://quickdraw.withgoogle.com/).  I am currently using a dataset consisting of 50,000 examples (25 categories, 2,000 / category).  These sketches were downloaded in sequential vector format (sequenced by strokes in the order it was drawn) but I am particularly interested in sequences of raster (video) data.  Therefore, I used Paper.js to import QuickDraw data into the web client and convert it to a series of raster frames of the sketch being drawn in the same order.
 
-With the help of Keras, I built a few simple neural networks that perform supervised learning on these sketches.  The networks make use of Keras' convolutional long short-term memory (ConvLSTM) layer to process the sequence of images and produce a category prediction.  I have already trained a few models that perform well on my evaluation dataset.  With the locally hosted server running, I can use the web client to draw my own sketch, convert it into a series of raster frames, and ship it off to the server where a pretrained network makes a prediction.  The server returns a few things: the transformed inputs, predictions, and hidden states for each frame, and finally the eval set confusion matrices for the three top performing models.
+With the help of Keras, I built a few simple neural networks that perform supervised object classification learning on these sketches.  The networks make use of Keras' convolutional long short-term memory (ConvLSTM) layer to process the sequence of images and produce a category prediction.  I have already trained a few models that perform well on my evaluation dataset.  With the locally hosted server running, I can use the web client to draw my own sketch, convert it into a series of raster frames, and ship it off to the server where a pretrained network makes a prediction of the object category.  The server returns a few things: the transformed input frames (downsampled and color inverted), predictions, and hidden states for each frame, and finally the eval set confusion matrices for the three top performing models.  Additionally, I have trained a feedforward CNN on only completed sketches.  When a sketch is submitted, the individual frames are also fed to this network with its prediction results for each frame presented along side the ConvLSTM's predictions.
 
 
-See "test-mug.png" for example.
+Convolutional LSTM Network paper: https://papers.nips.cc/paper/2015/file/07563a3fe3bbe7e3ba84431ad9d055af-Paper.pdf
+
+
+See "test-mug.png" for an example of when the web page updates with prediction results.
 
 
 I am interested in the network's frame-by-frame confidence and hidden state dynamics to see which parts of the sketch caused significant disturbances.  A top priority for this project is to incorporate an attention mechanism and subsequently visualize attention dynamics.
