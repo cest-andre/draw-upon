@@ -9,31 +9,19 @@ Draw Upon is a simple web application which provides a peak under the hood at a 
 
 With the help of Keras, I built a few simple neural networks that perform supervised object classification learning on these sketches.  The networks make use of Keras' convolutional long short-term memory (ConvLSTM - [link to paper](https://papers.nips.cc/paper/2015/file/07563a3fe3bbe7e3ba84431ad9d055af-Paper.pdf)) layer to process the sequence of images and produce a category prediction.  I have already trained a few models that perform well on my evaluation dataset (80/20 split - train with 1600 / cat, evaluate with 400 / cat).  With the locally hosted server running, I can use the web client to draw my own sketch, convert it into a series of raster frames, and ship it off to the server where a pretrained network makes a prediction of the object category.
 
-The server returns a few things: the transformed input frames (downsampled and color inverted), predictions, and hidden states for each frame, and finally the eval set confusion matrices for the three top performing models.  Additionally, I have trained a feedforward CNN on only completed sketches (last frame of each sequence).  When a sketch is submitted, the individual frames are also fed to this network with its prediction results for each frame presented along side the ConvLSTM's predictions.
+The server returns a few things: the transformed input frames (downsampled and color inverted), predictions, hidden states for each frame, and the confusion matrices for the three top performing models on the eval dataset.  Additionally, I have trained a feedforward CNN on only completed sketches (last frame of each sequence).  When a sketch is submitted, the individual frames are also fed to this network with its prediction results for each frame presented along side the ConvLSTM's predictions.
 
 See "test-mug.png" for an example of when the web page updates with prediction results.
 
 
-## Client-side Dependencies
+## Dependencies
 
-[Paper.js 0.12.11](http://paperjs.org/)
-
-[jQuery 3.5.1](https://jquery.com/)
-
-[D3 6.7.0](https://d3js.org/)
-
-Note:  D3 provides a src link which is hardcoded in sketch_page.html.  Paper.js and jQuery must be downloaded (again refer to sketch_page.html for where it is referenced).
-
-
-## Server-side Dependencies
-
-[Python 3.7](https://www.python.org/)
-
-[TensorFlow 2.3.2](https://www.tensorflow.org/)
-
-[NumPy 1.18.5](https://numpy.org/)
-
-[opencv-python 4.5.1.48](https://pypi.org/project/opencv-python/)
+|               Client-Side               |                            Server-Side                            |
+|:---------------------------------------:|:-----------------------------------------------------------------:|
+| [Paper.js 0.12.11](http://paperjs.org/) |               [Python 3.7](https://www.python.org/)               |
+|   [jQuery 3.5.1](https://jquery.com/)   |          [TensorFlow 2.3.2](https://www.tensorflow.org/)          |
+|      [D3 6.7.0](https://d3js.org/)      |                 [NumPy 1.18.5](https://numpy.org/)                |
+|                                         | [opencv-python 4.5.1.48](https://pypi.org/project/opencv-python/) |
 
 
 ## Instructions
