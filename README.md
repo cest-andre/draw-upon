@@ -13,15 +13,17 @@ The server returns a few things: the transformed input frames (downsampled and c
 
 See "test-mug.png" for an example of when the web page updates with prediction results.
 
+Also included in the source code are attempts at building a model with normalization to better generalize to static sketch data when only trained on natural images (currently Cifar - see the [SketchTransfer paper](https://openaccess.thecvf.com/content_WACV_2020/papers/Lamb_SketchTransfer_A_New_Dataset_for_Exploring_Detail-Invariance_and_the_Abstractions_WACV_2020_paper.pdf) by Lamb et al.).
+
 
 ## Dependencies
 
-|               Client-Side               |                            Server-Side                            |
-|:---------------------------------------:|:-----------------------------------------------------------------:|
-| [Paper.js 0.12.11](http://paperjs.org/) |               [Python 3.7](https://www.python.org/)               |
-|   [jQuery 3.5.1](https://jquery.com/)   |          [TensorFlow 2.3.2](https://www.tensorflow.org/)          |
-|      [D3 6.7.0](https://d3js.org/)      |                 [NumPy 1.18.5](https://numpy.org/)                |
-|                                         | [opencv-python 4.5.1.48](https://pypi.org/project/opencv-python/) |
+|               Client-Side               | |                            Server-Side                            |
+|:---------------------------------------:| |:-----------------------------------------------------------------:|
+| [Paper.js 0.12.11](http://paperjs.org/) | |               [Python 3.7](https://www.python.org/)               |
+|   [jQuery 3.5.1](https://jquery.com/)   | |          [TensorFlow 2.3.2](https://www.tensorflow.org/)          |
+|      [D3 6.7.0](https://d3js.org/)      | |                 [NumPy 1.18.5](https://numpy.org/)                |
+                                            | [opencv-python 4.5.1.48](https://pypi.org/project/opencv-python/) |
 
 
 ## Instructions
