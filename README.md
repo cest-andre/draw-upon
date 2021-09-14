@@ -18,12 +18,19 @@ Also included in the source code are attempts at building a model with normaliza
 
 ## Dependencies
 
-|               Client-Side               | |                            Server-Side                            |
-|:---------------------------------------:| |:-----------------------------------------------------------------:|
-| [Paper.js 0.12.11](http://paperjs.org/) | |               [Python 3.7](https://www.python.org/)               |
-|   [jQuery 3.5.1](https://jquery.com/)   | |          [TensorFlow 2.3.2](https://www.tensorflow.org/)          |
-|      [D3 6.7.0](https://d3js.org/)      | |                 [NumPy 1.18.5](https://numpy.org/)                |
-                                            | [opencv-python 4.5.1.48](https://pypi.org/project/opencv-python/) |
+|               Client-Side               |
+|:---------------------------------------:|
+| [Paper.js 0.12.11](http://paperjs.org/) |
+|   [jQuery 3.5.1](https://jquery.com/)   |
+|      [D3 6.7.0](https://d3js.org/)      |
+
+
+|                            Server-Side                            |
+|:-----------------------------------------------------------------:|
+|               [Python 3.7](https://www.python.org/)               |
+|          [TensorFlow 2.3.2](https://www.tensorflow.org/)          |
+|                 [NumPy 1.18.5](https://numpy.org/)                |
+| [opencv-python 4.5.1.48](https://pypi.org/project/opencv-python/) |
 
 
 ## Instructions
