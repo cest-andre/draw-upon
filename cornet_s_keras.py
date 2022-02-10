@@ -25,8 +25,6 @@ class RecurrentCNNBlock(layers.Layer):
         self.padding = layers.ZeroPadding2D(padding=(1,1))
         self.conv2 = layers.Conv2D(out_channels * self.scale, kernel_size=3, strides=(1,1), use_bias=False)
         self.pool = layers.MaxPooling2D(pool_size=(2,2), strides=(2,2))
-        # self.conv2a = layers.Conv2D(out_channels * self.scale, kernel_size=3, strides=(2,2), use_bias=False)
-        # self.conv2b = layers.Conv2D(out_channels * self.scale, kernel_size=3, strides=(1,1), use_bias=False)
         self.nonlin2 = layers.Activation(activations.relu)
         self.conv3 = layers.Conv2D(out_channels, kernel_size=1, use_bias=False)
         self.nonlin3 = layers.Activation(activations.relu)
@@ -42,8 +40,6 @@ class RecurrentCNNBlock(layers.Layer):
     def call(self, inp, td_inp=None, skip_inp=None, fb=False, fb2=False, training=False):
 
         x = self.conv_input(inp)
-        print("x shape")
-        print(x.shape)
 
         for t in range(self.times):
             if t == 0:
@@ -55,11 +51,6 @@ class RecurrentCNNBlock(layers.Layer):
             x = getattr(self, f'norm1_{t}')(x)
             x = self.nonlin1(x)
 
-            print(f"conv2 x shape t={t}")
-            print(x.shape)
-            print("conv2 strides")
-            print(self.conv2.strides)
-
             #   Cannot change strides in keras I believe.
             #   Reassignment of stride parameter does not alter output shape.  Pooling as alternative approach.
             if t == 0:
@@ -70,13 +61,9 @@ class RecurrentCNNBlock(layers.Layer):
             x = getattr(self, f'norm2_{t}')(x)
             x = self.nonlin2(x)
 
-            print(f"conv3 x shape t={t}")
-            print(x.shape)
             x = self.conv3(x)
             x = getattr(self, f'norm3_{t}')(x)
 
-            print(f"add x shape t={t}")
-            print(x.shape)
             x = self.Add([x, skip])
             x = self.nonlin3(x)
 
@@ -113,7 +100,6 @@ class RecurrentCNN(keras.Model):
     def call(self, x, training=None, mask=None):
 
         for stage in self.V1:
-            print(x.shape)
             x = stage(x)
 
         x = self.V2(x)
