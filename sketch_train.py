@@ -9,10 +9,16 @@ import tensorflow_addons as tfa
 import numpy as np
 import math
 import cv2
-from sketch_model import MaskConvLSTM2D, ConvLSTMModel, ConvLSTM2DCellNormed
+# from sketch_model import MaskConvLSTM2D, ConvLSTMModel, ConvLSTM2DCellNormed, RecurrentCNN
+import sketch_utils as utils
+# from sketch_model import RecurrentCNN
+from cornet_s_keras import RecurrentCNN
+import gc
+# from sketch_model_test import RecurrentCNN
 from PIL import Image
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+tf.compat.v1.enable_eager_execution()
 
 #   Disables GPU.
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -56,13 +62,32 @@ def load_lstm_sketchtransfer_data():
 
 def load_cnn_sketchtransfer_data():
     #   Load data.
-    train_imgs = np.load('sketch_data/sketchtransfer/sketchtransfer_cnn_train_samples.npy', allow_pickle=True)
+    train_imgs = np.load('S:/Documents/Computational Visual Abstraction Project/datasets/sketch_data/sketchtransfer/sketchtransfer_cnn_train_samples.npy', allow_pickle=True)
     #   May need to invert sketches to be white on black background.
-    test_imgs = np.load('sketch_data/sketchtransfer/sketchtransfer_cnn_test_samples.npy', allow_pickle=True)
-    train_labels = np.load('sketch_data/sketchtransfer/sketchtransfer_train_labels.npy', allow_pickle=True)
-    test_labels = np.load('sketch_data/sketchtransfer/sketchtransfer_test_labels.npy', allow_pickle=True)
+    test_imgs = np.load('S:/Documents/Computational Visual Abstraction Project/datasets/sketch_data/sketchtransfer/sketchtransfer_cnn_test_samples.npy', allow_pickle=True)
+    # test_imgs = np.load('S:/Documents/Computational Visual Abstraction Project/datasets/sketch_data/sketchtransfer/cifar_cnn_test_samples.npy', allow_pickle=True)
+    train_labels = np.load('S:/Documents/Computational Visual Abstraction Project/datasets/sketch_data/sketchtransfer/sketchtransfer_train_labels.npy', allow_pickle=True)
+    test_labels = np.load('S:/Documents/Computational Visual Abstraction Project/datasets/sketch_data/sketchtransfer/sketchtransfer_test_labels.npy', allow_pickle=True)
+    # test_labels = np.load('S:/Documents/Computational Visual Abstraction Project/datasets/sketch_data/sketchtransfer/cifar_cnn_test_labels.npy', allow_pickle=True)
 
     return train_imgs, train_labels, test_imgs, test_labels
+
+
+def load_imagenet_subset_data():
+    train_x = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\sketch_imagenet_subset\\train_x.npy', allow_pickle=True)
+    train_y = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\sketch_imagenet_subset\\train_y.npy', allow_pickle=True)
+
+    test_x = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\sketch_imagenet_subset\\test_x.npy', allow_pickle=True)
+    test_y = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\sketch_imagenet_subset\\test_y.npy', allow_pickle=True)
+
+    return train_x, train_y, test_x, test_y
+
+
+def load_imagenet_data():
+    train_x = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\train_x.npy', allow_pickle=True)
+    train_y = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\train_y.npy', allow_pickle=True)
+
+    return train_x, train_y, None, None
 
 
 def load_lstm_data(prefix, categories):
@@ -107,6 +132,7 @@ def load_lstm_data(prefix, categories):
                 #   Perhaps make np array so that more GRAM is available.
                 img = tf.io.read_file(seqDir + f"{frameNum}.png")
                 img = tf.image.decode_png(img, channels=4).numpy()
+
                 #   Black sketch on white background.
                 #img = (255 - img[:, :, 3])
                 #   White sketch on black background.
@@ -320,34 +346,34 @@ def train_lstm_model(train_samples, train_labels, test_samples, test_labels, tra
     # #   Could add conv layers here instead.
     # model.add(layers.GlobalAveragePooling2D())
     # if transfer:
-    #     model.add(layers.Dense(10, activation='softmax'))
+    #     model.add(layers.Dense(9, activation='softmax'))
     # else:
     #     model.add(layers.Dense(25, activation='softmax'))
 
-    model = ConvLSTMModel()
+    # model = ConvLSTMModel()
 
-    model.compile(
-        loss=keras.losses.SparseCategoricalCrossentropy(),
-        optimizer=keras.optimizers.Adam(lr=0.001),
-        metrics=["accuracy"]
-    )
-
-    # print(model.summary())
-
-    batch_size = 4
-
-    # #   Try autotune.
-    # AUTOTUNE = tf.data.experimental.AUTOTUNE
-    # train_data =
-
-    # model.load_weights('trained_sketch_rec_models/SketchTransferCandidates/candidate_25a_weights_5ep/')
-    epoch = 1
-    while epoch < 6:
-        model.fit(train_samples, train_labels, batch_size=batch_size, epochs=1)
-        model.save_weights(f'trained_sketch_rec_models/SketchTransferCandidates/candidate_27_weights_{epoch}ep/')
-        epoch += 1
-
-        model.evaluate(test_samples, test_labels, batch_size=batch_size)
+    # model.compile(
+    #     loss=keras.losses.SparseCategoricalCrossentropy(),
+    #     optimizer=keras.optimizers.Adam(lr=0.001),
+    #     metrics=["accuracy"]
+    # )
+    #
+    # # print(model.summary())
+    #
+    # batch_size = 4
+    #
+    # # #   Try autotune.
+    # # AUTOTUNE = tf.data.experimental.AUTOTUNE
+    # # train_data =
+    #
+    # model.load_weights('trained_sketch_rec_models/SketchTransferCandidates/candidate_35d_weights_5ep/')
+    # epoch = 6
+    # while epoch < 7:
+    #     model.fit(train_samples, train_labels, batch_size=batch_size, epochs=1)
+    #     model.save_weights(f'trained_sketch_rec_models/SketchTransferCandidates/candidate_35d_weights_{epoch}ep/')
+    #     epoch += 1
+    #
+    #     model.evaluate(test_samples, test_labels, batch_size=batch_size)
 
 
 def train_cnn_model(train_samples, train_labels, test_samples, test_labels, transfer=False):
@@ -357,14 +383,18 @@ def train_cnn_model(train_samples, train_labels, test_samples, test_labels, tran
         train_labels = np.asarray(train_labels)
         test_labels = np.asarray(test_labels)
 
+        (x_train, y_train), (x_test, y_test) = keras.datasets.cifar10.load_data()
+        test_samples = x_test
+        test_labels = y_test
+
         # train_samples = keras.preprocessing.sequence.pad_sequences(train_samples, padding="post", value=1000*255)
         # test_samples = keras.preprocessing.sequence.pad_sequences(test_samples, padding="post", value=1000*255)
 
         # train_samples = train_samples.astype("float32") / 255.0
         # test_samples = test_samples.astype("float32") / 255.0
         #
-        train_samples = np.reshape(train_samples, [train_samples.shape[0], 32, 32, 1])
-        test_samples = np.reshape(test_samples, [test_samples.shape[0], 32, 32, 1])
+        # train_samples = np.reshape(train_samples, [train_samples.shape[0], 32, 32, 3])
+        # test_samples = np.reshape(test_samples, [test_samples.shape[0], 32, 32, 3])
     # else:
     #     train_samples = train_samples / 255
         # print(train_samples[0])
@@ -374,101 +404,131 @@ def train_cnn_model(train_samples, train_labels, test_samples, test_labels, tran
         # cv2.destroyAllWindows()
         # return
 
-    img_dim = train_samples.shape[2]
-    channels = train_samples.shape[3]
+    # train_samples = train_samples.astype("float32")
+    # test_samples = test_samples.astype("float32")
 
-    print(train_samples.shape)
-    print(train_labels.shape)
+    # train_samples = utils.augment_dataset(train_samples)
 
-    inputs = keras.Input(shape=(img_dim, img_dim, channels))
-    x = layers.Conv2D(128, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(inputs)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
-    x = layers.Conv2D(128, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
-    x = layers.Conv2D(128, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
+    # for i in range(train_samples.shape[0]):
+    #     train_samples[i] = keras.applications.vgg16.preprocess_input(train_samples[i])
 
-    x = layers.MaxPooling2D()(x)
-    x = layers.Conv2D(256, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
-    x = layers.Conv2D(256, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
-    x = layers.Conv2D(256, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
+    # for i in range(test_samples.shape[0]):
+    #     test_samples[i] = keras.applications.vgg16.preprocess_input(test_samples[i])
 
+
+    # img_dim = train_samples.shape[2]
+    # channels = train_samples.shape[3]
+    #
+    # print(train_samples.shape)
+    # print(train_labels.shape)
+    #
+    # inputs = keras.Input(shape=(img_dim, img_dim, channels))
+    # x = layers.Conv2D(128, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(inputs)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    # x = layers.Conv2D(128, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    # x = layers.Conv2D(128, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    #
     # x = layers.MaxPooling2D()(x)
-    x = layers.Conv2D(512, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
-    x = layers.Conv2D(512, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
-    x = layers.Conv2D(512, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
+    # x = layers.Conv2D(256, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    # x = layers.Conv2D(256, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    # x = layers.Conv2D(256, 5, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    #
+    # # x = layers.MaxPooling2D()(x)
+    # x = layers.Conv2D(512, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    # x = layers.Conv2D(512, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    # x = layers.Conv2D(512, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    #
+    # x = layers.MaxPooling2D()(x)
+    # x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    # x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    # x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    # x = layers.BatchNormalization()(x)
+    # x = keras.activations.relu(x)
+    #
+    # x = layers.GlobalAveragePooling2D()(x)
+    #
+    # if transfer:
+    #     outputs = layers.Dense(10, activation='softmax')(x)
+    # else:
+    #     outputs = layers.Dense(25, activation='softmax')(x)
+    #
+    # model = keras.Model(inputs=inputs, outputs=outputs)
 
-    x = layers.MaxPooling2D()(x)
-    x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
-    x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
-    x = layers.Conv2D(1024, 3, padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
-    x = keras.activations.relu(x)
-
-    x = layers.GlobalAveragePooling2D()(x)
-
-    if transfer:
-        outputs = layers.Dense(10, activation='softmax')(x)
-    else:
-        outputs = layers.Dense(25, activation='softmax')(x)
-
+    batch_size = 49
+    model = RecurrentCNN()
+    print(train_samples.shape)
+    inputs = keras.Input(shape=train_samples[0].shape, batch_size=batch_size)
+    # x = utils.augment_dataset(inputs)
+    outputs = model(inputs)
     model = keras.Model(inputs=inputs, outputs=outputs)
 
     model.compile(
-        loss=keras.losses.SparseCategoricalCrossentropy(),
-        optimizer=keras.optimizers.Adam(lr=0.0001),
+        loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+        optimizer=tf.keras.optimizers.Adam(lr=0.001),
         metrics=["accuracy"]
     )
 
-    print(model.summary())
+    # model.load_weights('trained_sketch_rec_models/SketchTransferCandidates/rcnn_cand_8e_weights_7ep/')
+    epoch = 1
+    # canny_samples = utils.canny_dataset(train_samples)
 
-    batch_size = 8
+    while epoch < 81:
+        # train_samples = np.load('S:/Documents/Computational Visual Abstraction Project/datasets/sketch_data/sketchtransfer/sketchtransfer_cnn_train_samples.npy', allow_pickle=True)
+        # train_samples = utils.augment_dataset(train_samples)
 
-    # #   Try autotune.
-    # AUTOTUNE = tf.data.experimental.AUTOTUNE
-    # train_data =
+        # del train_samples
+        # gc.collect()
+        # train_samples = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\train_x.npy', allow_pickle=True)
 
-    model.load_weights('trained_sketch_rec_models/SketchTransferCandidates/cnn_candidate_3_weights_10ep/')
-    epoch = 15
+        print(f"Epoch #{epoch}")
+        model.fit(train_samples, train_labels, batch_size=batch_size, epochs=1)
+        # model.save_weights(f'trained_sketch_rec_models/SketchTransferCandidates/rcnn_cand_8e_weights_{epoch}ep/')
+        
+        # model.load_weights(f'trained_sketch_rec_models/SketchTransferCandidates/rcnn_cand_6_weights_{epoch}ep/')
+        # model.evaluate(test_samples, test_labels, batch_size=batch_size)
 
-    while epoch < 45:
-        model.fit(train_samples, train_labels, batch_size=batch_size, epochs=5)
-        model.save_weights(f'trained_sketch_rec_models/SketchTransferCandidates/cnn_candidate_3_weights_{epoch}ep/')
-        epoch += 5
+        # del train_samples
+        # gc.collect()
+        # train_samples = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\train_x.npy', allow_pickle=True)
+        # train_samples = train_samples.astype("float32")
 
-    # model.fit(train_samples, train_labels, batch_size=batch_size, epochs=5)
-    # model.save_weights(f'trained_sketch_rec_models/cnn_candidate_4_weights_{epoch}ep/')
+        # if epoch % 15 == 0:
+        #     aug_samples = utils.augment_dataset(train_samples)
 
-        model.evaluate(test_samples, test_labels, batch_size=batch_size)
-
+        epoch += 1
+        # if epoch == 2:
+        #     print(model.summary())
 
 #   Current category selection is preferred because they contain much closer to 1k sub-50 length sequences.  Need to recreate dataset using 2 segments
 #   per frame to shorten these sequences and have more instances.
 # train_samples, train_labels, test_samples, test_labels = load_lstm_data("sketch_data/converted_data/", cat_list)
-train_samples, train_labels, test_samples, test_labels = load_lstm_sketchtransfer_data()
-train_lstm_model(train_samples, train_labels, test_samples, test_labels, transfer=True)
+# train_samples, train_labels, test_samples, test_labels = load_lstm_sketchtransfer_data()
+# train_lstm_model(train_samples, train_labels, test_samples, test_labels, transfer=True)
 
 # train_samples, train_labels, test_samples, test_labels = load_cnn_data("sketch_data/converted_data/", cat_list)
 # train_samples, train_labels, test_samples, test_labels = load_cnn_sketchtransfer_data()
-# train_cnn_model(train_samples, train_labels, test_samples, test_labels, transfer=True)
+train_x, train_y, test_x, test_y = load_imagenet_subset_data()
+train_cnn_model(train_x, train_y, test_x, test_y, transfer=True)
 
 # produce_confusion_matrix('confusion/model_2k-14_3ep.npy')
