@@ -18,7 +18,7 @@ class RecurrentCNNBlock(layers.Layer):
 
         self.conv_input = layers.Conv2D(out_channels, kernel_size=1, use_bias=False)
         self.skip = layers.Conv2D(out_channels, kernel_size=1, strides=(2,2), use_bias=False)
-        self.norm_skip = layers.BatchNormalization(momentum=0.1, epsilon=1e-05)
+        self.norm_skip = layers.BatchNormalization(epsilon=1e-05)
 
         self.conv1 = layers.Conv2D(out_channels * self.scale, kernel_size=1, use_bias=False)
         self.nonlin1 = layers.Activation(activations.relu)
@@ -32,9 +32,9 @@ class RecurrentCNNBlock(layers.Layer):
         self.Add = layers.Add()
 
         for t in range(self.times):
-            setattr(self, f'norm1_{t}', layers.BatchNormalization(momentum=0.1, epsilon=1e-05))
-            setattr(self, f'norm2_{t}', layers.BatchNormalization(momentum=0.1, epsilon=1e-05))
-            setattr(self, f'norm3_{t}', layers.BatchNormalization(momentum=0.1, epsilon=1e-05))
+            setattr(self, f'norm1_{t}', layers.BatchNormalization(epsilon=1e-05))
+            setattr(self, f'norm2_{t}', layers.BatchNormalization(epsilon=1e-05))
+            setattr(self, f'norm3_{t}', layers.BatchNormalization(epsilon=1e-05))
 
 
     def call(self, inp, td_inp=None, skip_inp=None, fb=False, fb2=False, training=False):
@@ -77,13 +77,13 @@ class RecurrentCNN(keras.Model):
         self.V1 = [
             layers.ZeroPadding2D(padding=(3,3)),
             layers.Conv2D(64, kernel_size=7, strides=(2,2), use_bias=False),
-            layers.BatchNormalization(momentum=0.1, epsilon=1e-05),
+            layers.BatchNormalization(epsilon=1e-05),
             layers.Activation(activations.relu),
             layers.ZeroPadding2D(padding=(1,1)),
             layers.MaxPooling2D(pool_size=(3,3), strides=(2,2)),
             layers.ZeroPadding2D(padding=(1,1)),
             layers.Conv2D(64, kernel_size=3, strides=(1,1), use_bias=False),
-            layers.BatchNormalization(momentum=0.1, epsilon=1e-05),
+            layers.BatchNormalization(epsilon=1e-05),
             layers.Activation(activations.relu)
         ]
 
