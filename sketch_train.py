@@ -3,22 +3,24 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  #  Suppresses some logs
 
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers, regularizers
+from tensorflow.keras import layers, regularizers, backend
 from tensorflow.python.keras.layers.convolutional_recurrent import ConvRNN2D
 import tensorflow_addons as tfa
 import numpy as np
 import math
-import cv2
+import cv2 as cv
 # from sketch_model import MaskConvLSTM2D, ConvLSTMModel, ConvLSTM2DCellNormed, RecurrentCNN
 import sketch_utils as utils
 # from sketch_model import RecurrentCNN
-from cornet_s_keras import RecurrentCNN
-import gc
 # from sketch_model_test import RecurrentCNN
+from hgru_model import RecurrentCNN
+# from cornet_s_keras import RecurrentCNN
+import gc
 from PIL import Image
+from matplotlib import pyplot as plt
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-tf.compat.v1.enable_eager_execution()
+# tf.compat.v1.enable_eager_execution()
 
 #   Disables GPU.
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -87,7 +89,10 @@ def load_imagenet_data():
     train_x = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\train_x.npy', allow_pickle=True)
     train_y = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\train_y.npy', allow_pickle=True)
 
-    return train_x, train_y, None, None
+    test_x = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\sketch_test_x.npy', allow_pickle=True)
+    test_y = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\sketch_test_y.npy', allow_pickle=True)
+
+    return train_x, train_y, test_x, test_y
 
 
 def load_lstm_data(prefix, categories):
@@ -138,7 +143,7 @@ def load_lstm_data(prefix, categories):
                 #   White sketch on black background.
                 img = img[:, :, 3]
                 #   Try other resizers.
-                img = cv2.resize(img, dsize=(32, 32), interpolation=cv2.INTER_AREA)
+                img = cv.resize(img, dsize=(32, 32), interpolation=cv.INTER_AREA)
                 img = np.reshape(img, [32, 32, 1])
                 seqData.append(img)
                 if frameNum == numFrames:
@@ -208,7 +213,7 @@ def load_cnn_data(prefix, categories):
             #   White sketch on black background.
             img = img[:, :, 3]
             #   Try other resizers.
-            img = cv2.resize(img, dsize=(32, 32), interpolation=cv2.INTER_AREA)
+            img = cv.resize(img, dsize=(32, 32), interpolation=cv.INTER_AREA)
             img = np.reshape(img, [32, 32, 1])
 
             if j < num_training_per_cat:
@@ -404,17 +409,6 @@ def train_cnn_model(train_samples, train_labels, test_samples, test_labels, tran
         # cv2.destroyAllWindows()
         # return
 
-    # train_samples = train_samples.astype("float32")
-    # test_samples = test_samples.astype("float32")
-
-    # train_samples = utils.augment_dataset(train_samples)
-
-    # for i in range(train_samples.shape[0]):
-    #     train_samples[i] = keras.applications.vgg16.preprocess_input(train_samples[i])
-
-    # for i in range(test_samples.shape[0]):
-    #     test_samples[i] = keras.applications.vgg16.preprocess_input(test_samples[i])
-
 
     # img_dim = train_samples.shape[2]
     # channels = train_samples.shape[3]
@@ -474,39 +468,74 @@ def train_cnn_model(train_samples, train_labels, test_samples, test_labels, tran
     #     outputs = layers.Dense(25, activation='softmax')(x)
     #
     # model = keras.Model(inputs=inputs, outputs=outputs)
+    # train_samples = train_samples[0:100]
+    # train_labels = train_labels[0:100]
 
-    batch_size = 49
-    model = RecurrentCNN()
-    print(train_samples.shape)
-    inputs = keras.Input(shape=train_samples[0].shape, batch_size=batch_size)
+    train_samples = train_samples.astype("float32")
+    test_samples = test_samples.astype("float32")
+
+    # train_samples = utils.augment_dataset(train_samples)
+
+    for i in range(train_samples.shape[0]):
+        train_samples[i] = keras.applications.vgg16.preprocess_input(train_samples[i])
+
+    for i in range(test_samples.shape[0]):
+        test_samples[i] = keras.applications.vgg16.preprocess_input(test_samples[i])
+
+    batch_size = 8
+    model = RecurrentCNN(fb_loops=1)
+
+    # print(train_samples.shape)
+    # inputs = keras.Input(shape=train_samples[0].shape, batch_size=batch_size)
     # x = utils.augment_dataset(inputs)
-    outputs = model(inputs)
-    model = keras.Model(inputs=inputs, outputs=outputs)
+    # outputs = model(x)
+    # model = keras.Model(inputs=inputs, outputs=outputs)
+
+    # model.trainable = False
+    # pool = layers.GlobalAveragePooling2D()
+    # decode = layers.Dense(9, activation='softmax', trainable=True)
+    #
+    # inputs = keras.Input(shape=train_samples[0].shape, batch_size=batch_size)
+    # x = model(inputs)
+    # x = pool(x)
+    # outputs = decode(x)
+    #
+    # model = keras.Model(inputs=inputs, outputs=outputs)
+
+    # datagen = keras.preprocessing.image.ImageDataGenerator(preprocessing_function=utils.augment_image)
 
     model.compile(
         loss=tf.keras.losses.SparseCategoricalCrossentropy(),
         optimizer=tf.keras.optimizers.Adam(lr=0.001),
-        metrics=["accuracy"]
+        metrics=["accuracy"],
+        run_eagerly=True
     )
 
-    # model.load_weights('trained_sketch_rec_models/SketchTransferCandidates/rcnn_cand_8e_weights_7ep/')
-    epoch = 1
-    # canny_samples = utils.canny_dataset(train_samples)
+    # model.load_weights('trained_sketch_rec_models/SketchTransferCandidates/rcnn_cand_14h_weights_6ep/')
 
-    while epoch < 81:
+    # model.evaluate(test_samples[0:4], test_labels[0:4], batch_size=batch_size)
+    # utils.visualize_kernels(model.V1.conv_inp.get_weights()[0])
+    # return
+
+    epoch = 1
+
+    while epoch < 36:
         # train_samples = np.load('S:/Documents/Computational Visual Abstraction Project/datasets/sketch_data/sketchtransfer/sketchtransfer_cnn_train_samples.npy', allow_pickle=True)
         # train_samples = utils.augment_dataset(train_samples)
 
         # del train_samples
+        # del datagen
         # gc.collect()
         # train_samples = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\train_x.npy', allow_pickle=True)
+        # datagen = keras.preprocessing.image.ImageDataGenerator(preprocessing_function=utils.augment_image)
 
         print(f"Epoch #{epoch}")
+        # model.fit(datagen.flow(train_samples, train_labels, batch_size=batch_size), steps_per_epoch=train_samples.shape[0] // batch_size, epochs=1)
         model.fit(train_samples, train_labels, batch_size=batch_size, epochs=1)
-        # model.save_weights(f'trained_sketch_rec_models/SketchTransferCandidates/rcnn_cand_8e_weights_{epoch}ep/')
-        
-        # model.load_weights(f'trained_sketch_rec_models/SketchTransferCandidates/rcnn_cand_6_weights_{epoch}ep/')
-        # model.evaluate(test_samples, test_labels, batch_size=batch_size)
+        model.save_weights(f'trained_sketch_rec_models/SketchTransferCandidates/rcnn_cand_14h_weights_{epoch}ep/')
+
+        # model.load_weights(f'trained_sketch_rec_models/SketchTransferCandidates/rcnn_cand_13x_weights_{epoch}ep/')
+        model.evaluate(test_samples, test_labels, batch_size=batch_size)
 
         # del train_samples
         # gc.collect()
@@ -528,7 +557,9 @@ def train_cnn_model(train_samples, train_labels, test_samples, test_labels, tran
 
 # train_samples, train_labels, test_samples, test_labels = load_cnn_data("sketch_data/converted_data/", cat_list)
 # train_samples, train_labels, test_samples, test_labels = load_cnn_sketchtransfer_data()
-train_x, train_y, test_x, test_y = load_imagenet_subset_data()
+
+# train_x, train_y, test_x, test_y = load_imagenet_data()
+train_x, train_y, test_x, test_y = load_cnn_sketchtransfer_data()
 train_cnn_model(train_x, train_y, test_x, test_y, transfer=True)
 
 # produce_confusion_matrix('confusion/model_2k-14_3ep.npy')

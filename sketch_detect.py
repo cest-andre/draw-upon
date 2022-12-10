@@ -13,7 +13,6 @@ from tensorflow.keras import activations
 from tensorflow.python.ops import array_ops
 import base64
 from sketch_model import MaskConvLSTM2D
-from PIL import Image
 
 #   Disables GPU.
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"

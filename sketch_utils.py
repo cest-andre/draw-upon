@@ -112,6 +112,37 @@ def color_jitter_nonrand(image,
     return image
 
 
+def augment_image(x):
+    gaussian_noise = keras.layers.GaussianNoise(1)
+
+    #   Preprocess, color distort, blur, then noise.
+
+    # x = tf.cast(x, tf.float32)
+    # x = keras.applications.vgg16.preprocess_input(x)
+
+    # x = gaussian_blur(x, 3, 1)
+
+    p = np.random.uniform()
+    if p < 0.75:
+        p = np.random.uniform()
+        if p < 0.8:
+            x = color_jitter(x, 1)
+        else:
+            x = tf.image.grayscale_to_rgb(tf.image.rgb_to_grayscale(x))
+
+        p = np.random.uniform(0.1, 2.0)
+        x = gaussian_blur(x, 3, p)
+
+        x = gaussian_noise(x)
+
+    # else:
+    #     x = x / 255
+
+    # x = keras.applications.vgg16.preprocess_input(x*255)
+
+    return x
+
+
 def augment_dataset(x):
     gaussian_noise = keras.layers.GaussianNoise(1)
     inp_list = []
@@ -122,10 +153,11 @@ def augment_dataset(x):
         #     print(i)
         # print(i)
 
-        inp = tf.cast(x[i], tf.float32)
+        # inp = tf.cast(x[i], tf.float32)
         # inp = tf.identity(x[i])
+        inp = x[i]
 
-        inp = keras.applications.vgg16.preprocess_input(inp)
+        # inp = keras.applications.vgg16.preprocess_input(inp)
 
         p = np.random.uniform()
         if p < 0.5:
@@ -139,6 +171,7 @@ def augment_dataset(x):
             inp = gaussian_blur(inp, 3, p)
             inp = gaussian_noise(inp)
 
+        inp = keras.applications.vgg16.preprocess_input(inp)
         inp_list.append(inp)
 
         #   Maybe run this line instead for testing so that test data is not augmented.
@@ -164,6 +197,88 @@ def canny_dataset(x):
         # cv.destroyAllWindows()
 
     return x
+
+
+def get_kernel_variance(kernels):
+    kernels = tf.transpose(kernels, perm=[2, 3, 0, 1])
+    mean, var = tf.nn.moments(kernels, axes=[2, 3])
+
+    # #   Obtain indices from vars where vars[i] >= threshold.  If so, run these kernels through the blur.
+    # for i in range(var.shape[0]):
+    #     for j in range(var.shape[1]):
+    #         v = var[i][j]
+    #         print(v)
+
+    return var
+
+
+def visualize_kernels(kernels):
+    kernels = tf.transpose(kernels, perm=[3, 0, 1, 2]).numpy()
+
+    for i in range(kernels.shape[0]):
+        k = kernels[i]
+        mean, var = tf.nn.moments(tf.convert_to_tensor(k), axes=[0, 1])
+        print(var)
+
+        k_min, k_max = k.min(), k.max()
+        k = (k - k_min) / (k_max - k_min)
+        k = cv.resize(k, (512,512))
+
+        # kernel = cv.Laplacian(kernels[i][:, :, 0], cv.CV_32F, ksize=3, scale=0.25)
+        # kernel = -1 * kernel
+        # mean, var = tf.nn.moments(tf.convert_to_tensor(kernel), axes=[0, 1])
+        # print(var)
+
+        # k_min, k_max = kernel.min(), kernel.max()
+        # kernel = (kernel - k_min) / (k_max - k_min)
+        # kernel = cv.resize(kernel, (512,512))
+
+        # f = np.fft.fft2(kernels[i])
+        # fshift = np.fft.fftshift(f)
+        # magnitude_spectrum = 20*np.log(np.abs(fshift))
+        # magnitude_spectrum = cv.resize(magnitude_spectrum, (512,512))
+
+        # for j in range(0, k.shape[2], 8):
+        #     cv.imshow(str(i) + " channel: " + str(j), k[:,:,j])
+        #     cv.waitKey(0)
+        #     cv.destroyAllWindows()
+
+        cv.imshow(str(i), k)
+        # cv.imshow("Freq Spectrum", magnitude_spectrum)
+        # cv.imshow("Higher Freq", kernel)
+
+        cv.waitKey(0)
+        cv.destroyAllWindows()
+
+
+def smooth_V1(model):
+    kernels = [
+        model.V1.conv_inp.get_weights()[0],
+        model.V1.w_gate_exc.read_value(),
+        model.V1.w_gate_inh.read_value(),
+    ]
+
+    for i in range(len(kernels)):
+        kernels[i] = tf.transpose(kernels[i], perm=[3, 0, 1, 2])
+        print(kernels[i].shape)
+
+
+    new_kernels = [
+        np.zeros(kernels[0].shape),
+        np.zeros(kernels[1].shape, dtype="float32"),
+        np.zeros(kernels[2].shape, dtype="float32")
+    ]
+
+    for i in range(len(kernels)):
+        kernel = kernels[i]
+        for j in range(kernel.shape[0]):
+            new_kernels[i][j] = gaussian_blur(kernel[j], 11, 0.1)
+
+        new_kernels[i] = tf.transpose(new_kernels[i], perm=[1, 2, 3, 0])
+
+    model.V1.conv_inp.set_weights([tf.convert_to_tensor(new_kernels[0])])
+    model.V1.w_gate_exc.assign(tf.convert_to_tensor(new_kernels[1]))
+    model.V1.w_gate_inh.assign(tf.convert_to_tensor(new_kernels[2]))
 
 
 def fetchSketch(sketchCat):
@@ -393,6 +508,43 @@ def imagenet_train_to_array():
     np.save('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\train_y.npy', labels)
 
 
+def imagenet_sketch_to_array():
+    root_folder = 'S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\ImageNet-Sketch\sketch\\'
+    folders = os.listdir(root_folder)
+
+    folder_label_list = ''
+
+    test_data = []
+    labels = []
+    label = -1
+    for folder in folders:
+        label += 1
+        print(label)
+        folder_label_list = folder_label_list + '\n' + folder + " - " + str(label)
+        for file in os.listdir(root_folder + folder + '\\'):
+            img_path = root_folder + folder + '\\' + file
+            img = tf.io.read_file(img_path)
+            img = tf.image.decode_jpeg(img, channels=3)
+            img = cv.resize(img.numpy(), dsize=(96, 96), interpolation=cv.INTER_AREA)
+            img = tf.expand_dims(img, axis=0)
+            img = keras.layers.Cropping2D(cropping=16)(img)[0].numpy()
+
+            # cv.imshow('beep', img)
+            # cv.waitKey(0)
+            # cv.destroyAllWindows()
+
+            test_data.append(img)
+            labels.append(label)
+
+        if label == 127:
+            break
+
+    print(folder_label_list)
+
+    np.save('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\sketch_test_x.npy', test_data)
+    np.save('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\sketch_test_y.npy', labels)
+
+
 def subset_test_to_array():
     root_folder = 'S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\sketch_imagenet_subset\\test\\'
     folders = os.listdir(root_folder)
@@ -438,3 +590,5 @@ def subset_test_to_array():
 # trainsamps = np.load('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\train_x.npy', allow_pickle=True)
 # trainsamps = trainsamps.astype("float32")
 # np.save('S:\Documents\Computational Visual Abstraction Project\datasets\sketch_data\\64x64_128cat_imnet_subset\\train_x_float32.npy', trainsamps)
+
+# imagenet_sketch_to_array()
